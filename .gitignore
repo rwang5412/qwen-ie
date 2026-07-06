@@ -1,0 +1,13 @@
+# data (lives on /scratch, never in git)
+*_with_edits*.json
+referenced_images.txt
+data/
+images/
+edited/
+*.jsonl
+
+# outputs / env
+smoke_out.png
+requirements.lock
+__pycache__/
+*.pyc
