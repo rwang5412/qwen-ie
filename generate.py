@@ -94,6 +94,10 @@ def main():
     ap.add_argument("--target-long", type=int, default=1024, help="crop long-side working resolution")
     ap.add_argument("--steps", type=int, default=40)
     ap.add_argument("--cfg", type=float, default=4.0)
+    ap.add_argument("--lora", default=None,
+                    help="LoRA repo/path to fuse (e.g. lightx2v/Qwen-Image-Edit-2511-Lightning); "
+                         "pair with --steps 4 --cfg 1.0")
+    ap.add_argument("--lora-weight", default=None, help="LoRA .safetensors filename inside --lora")
     args = ap.parse_args()
 
     assert torch.cuda.is_available(), "no CUDA visible — wrong node"
@@ -111,6 +115,12 @@ def main():
 
     pipe = QwenImageEditPlusPipeline.from_pretrained(
         MODEL_ID, torch_dtype=torch.bfloat16).to("cuda")
+
+    # Optional few-step distilled LoRA (Lightning): fuse it in, then run --steps 4 --cfg 1.0.
+    if args.lora:
+        pipe.load_lora_weights(args.lora, weight_name=args.lora_weight)
+        pipe.fuse_lora()
+        print(f"fused LoRA {args.lora} ({args.lora_weight})", flush=True)
 
     n_ok = n_skip = n_fail = 0
     with open(args.out_manifest, "a") as out_f:
