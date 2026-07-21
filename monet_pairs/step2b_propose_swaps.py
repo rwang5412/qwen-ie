@@ -26,13 +26,20 @@ PROPOSER_ID = "Qwen/Qwen2.5-VL-7B-Instruct"
 PROMPT = """This image crop answers the question: "{q}"
 The current grounded observation is: "{obs}"
 
-Propose ONE replacement observation that is:
-- the same kind of thing (object->different object, action->different action),
-- clearly and materially different from the current observation,
-- short (at most 6 words), concrete, and physically renderable by an image
-  editor changing ONLY this crop.
+Propose ONE replacement observation, subject to ALL of these rules:
+- The change must be FULLY renderable by repainting ONLY this crop: the
+  entire thing being changed is visible inside the crop, and nothing outside
+  the crop would need to change for the result to look coherent.
+- Allowed: swapping an object's identity, its color/texture/material, text or
+  logos, clothing or held items that are fully visible in the crop.
+- Forbidden: changes to pose, body position, motion, location, or anything
+  abstract (moods, relationships, vibes). Forbidden if the subject is only
+  partially visible in the crop.
+- The replacement must be the same kind of thing, clearly and materially
+  different, short (at most 6 words), and concrete.
 
-Reply with ONLY the replacement phrase, nothing else."""
+If no replacement satisfies every rule, reply with exactly: SKIP
+Otherwise reply with ONLY the replacement phrase, nothing else."""
 
 
 def ask(model, processor, image, text, max_new=24):
@@ -51,7 +58,7 @@ def ask(model, processor, image, text, max_new=24):
 
 def valid(obs, prop):
     a, b = obs.lower().strip(), prop.lower().strip()
-    if not b or len(prop.split()) > 6 or '"' in prop or '\n' in prop:
+    if b == 'skip' or not b or len(prop.split()) > 6 or '"' in prop or '\n' in prop:
         return False
     return a != b and a not in b and b not in a
 
