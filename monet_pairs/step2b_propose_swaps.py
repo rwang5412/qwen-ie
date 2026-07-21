@@ -18,7 +18,7 @@ import os
 import re
 
 import torch
-from PIL import Image
+from PIL import Image, ImageDraw
 from transformers import AutoProcessor, Qwen2_5_VLForConditionalGeneration
 
 PROPOSER_ID = "Qwen/Qwen2.5-VL-7B-Instruct"
@@ -40,6 +40,20 @@ Propose ONE replacement observation, subject to ALL of these rules:
 
 If no replacement satisfies every rule, reply with exactly: SKIP
 Otherwise reply with ONLY the replacement phrase, nothing else."""
+
+CONTAIN_PROMPT = """The red box in this image marks a region that will be
+repainted by an image editor to change "{obs}" into "{prop}".
+
+Answer NOT_CONTAINED if ANY of these hold:
+- the thing being changed extends outside the red box (limbs, body, object
+  parts crossing the box edge),
+- the change would require altering anything outside the box to stay
+  physically coherent (pose continuation, contact with ground/water,
+  shadows, reflections),
+- the box cuts through the middle of the subject mid-action.
+
+Otherwise answer CONTAINED.
+Reply with exactly one word: CONTAINED or NOT_CONTAINED."""
 
 
 def ask(model, processor, image, text, max_new=24):
@@ -103,6 +117,17 @@ def main():
             if not valid(r["obs"], prop):
                 n_drop += 1
                 print(f"[{i}] {r['id']} DROP proposal={prop!r}", flush=True)
+                continue
+            # containment gate: judge on the full original with the bbox drawn —
+            # subjects crossing the box edge (pose, contact, reflections) drop here.
+            boxed = Image.open(os.path.join(args.image_root, r["orig_image"])).convert("RGB")
+            ImageDraw.Draw(boxed).rectangle(r["bbox"], outline=(255, 0, 0),
+                                            width=max(3, boxed.width // 200))
+            verdict = ask(model, processor, boxed,
+                          CONTAIN_PROMPT.format(obs=r["obs"], prop=prop), max_new=8)
+            if not verdict.strip().upper().startswith("CONTAINED"):
+                n_drop += 1
+                print(f"[{i}] {r['id']} DROP not-contained ({prop!r})", flush=True)
                 continue
             r2 = dict(r)
             r2["obs_new"] = prop

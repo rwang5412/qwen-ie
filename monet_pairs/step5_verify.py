@@ -88,10 +88,26 @@ def main():
                        "content? Answer strictly yes or no.")
             consistent = cons.lower().lstrip().startswith("yes")
 
+            # seam gate for VLM-proposed edits: inspect the edited region plus
+            # margin for boundary breaks (misaligned limbs, cut poses, seams).
+            seam_ok, seam = True, ""
+            if r.get("kind") == "freetext" and consistent:
+                x1, y1, x2, y2 = r["bbox"]
+                mx, my = int((x2 - x1) * 0.4), int((y2 - y1) * 0.4)
+                region = img.crop((max(0, x1 - mx), max(0, y1 - my),
+                                   min(img.width, x2 + mx), min(img.height, y2 + my)))
+                seam = ask(model, processor, region,
+                           "Look closely at this image region. Is it physically "
+                           "coherent — no misaligned or truncated body parts, no "
+                           "visible editing seam, no content that breaks abruptly "
+                           "at an invisible boundary? Answer strictly yes or no.")
+                seam_ok = seam.lower().lstrip().startswith("yes")
+
             r2 = dict(r)
             r2["verifier_answer"] = ans
             r2["verifier_consistent"] = cons[:80]
-            r2["verified"] = bool(legible and consistent)
+            r2["verifier_seam"] = seam[:80]
+            r2["verified"] = bool(legible and consistent and seam_ok)
             out_f.write(json.dumps(r2) + "\n")
             out_f.flush()
             n_pass += r2["verified"]
