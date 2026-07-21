@@ -67,11 +67,16 @@ def main():
     ap.add_argument("--cfg", type=float, default=4.0)
     ap.add_argument("--lora", default=None)
     ap.add_argument("--lora-weight", default=None)
+    ap.add_argument("--kind", default=None, choices=["color", "number"],
+                    help="restrict to one edit kind; --start/--end index the filtered list")
     args = ap.parse_args()
 
     assert torch.cuda.is_available(), "no CUDA visible — wrong node"
 
     rows = [json.loads(l) for l in open(args.manifest)]
+    if args.kind:
+        rows = [r for r in rows if r["kind"] == args.kind]
+        print(f"kind={args.kind}: {len(rows)} rows", flush=True)
     end = args.end if args.end is not None else len(rows)
     shard = rows[args.start:end]
     os.makedirs(args.out_dir, exist_ok=True)
