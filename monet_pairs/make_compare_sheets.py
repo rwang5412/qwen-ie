@@ -46,9 +46,10 @@ def main():
         orig = Image.open(os.path.join(args.orig_root, r['orig_image'])).convert('RGB')
         aux2 = Image.open(p_aux2).convert('RGB')
         orig2 = Image.open(p_orig2).convert('RGB')
-        for im in (orig, orig2):  # outline the edit region
-            ImageDraw.Draw(im).rectangle(r['bbox'], outline=(255, 0, 0),
-                                         width=max(2, orig.width // 250))
+        # left column stays pristine (the unedited pair exactly as shipped);
+        # the red edit-region outline goes only on the edited original.
+        ImageDraw.Draw(orig2).rectangle(r['bbox'], outline=(255, 0, 0),
+                                        width=max(2, orig.width // 250))
 
         ht = min(320, aux.height)
         hb = min(480, orig.height)
