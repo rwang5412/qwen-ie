@@ -32,9 +32,27 @@ plus a frozen 10% holdout for the flip eval.
 | step3_edit_composite.py | 3,4 | cluster GPU | -> edited/{id}_orig.png, {id}_aux.png, roi_delta |
 | step5_verify.py | 5,6-assert | cluster GPU | + verified flag (Qwen2.5-VL-7B answers Q from original' alone) |
 | step7_encode_zprime.py | 7 | cluster GPU + Monet repo | verified rows -> zprime_cache/{id}.pt [K,H] (stub: wire 2 calls) |
+| make_base_rows.py | training format | Mac (done) | monet125k -> data/base_rows.json (trainer-native interleaved; VERIFY vs Monet loader's three-row dump) |
+| emit_sidecar.py | training format | cluster, LAST | verified.jsonl + Z' cache -> data/cf/pairs.jsonl + cf/images/ + cf/z/ (fp16) + splits/eval_flip_ids.txt |
 
 Step 8 split is assigned in step1 by stable hash (10.0% holdout), written once.
-Flip eval set = verified AND split=="holdout".
+Flip eval set = verified AND split=="holdout"; emitted as split=="eval_flip"
+in the sidecar and frozen in splits/eval_flip_ids.txt.
+
+## Training-time layout (the contract)
+
+```
+data/
+  base_rows.json            # 125,072 rows, trainer-native (schema UNVERIFIED
+                            #   until checked against Monet's loader dump)
+  cf/
+    pairs.jsonl             # final sidecar: row_id join key, obs/obs', y/y',
+                            #   bbox_norm, z_prime_path, verifier_pass, split
+    images/{id}_aux.png, {id}_full.png
+    z/{id}.pt               # [K, H] fp16
+  splits/eval_flip_ids.txt
+```
+The collator joins sidecar->base by row_id at load time; no merged format.
 
 ## Cluster run
 
