@@ -88,17 +88,22 @@ def process(row, subset):
         prompt = (f'Change the {old} object in the image to {new}'
                   if o_new.strip().lower() in COLOR_SET else f'Change {o} to {o_new}')
     else:
-        return None  # not rule-editable -> dropped
+        # free-text observation: no deterministic swap — emitted with empty
+        # spec fields; step2b (VLM proposal, cluster) fills them or drops.
+        kind, old, new, o_new, prompt = 'freetext', None, None, None, None
 
-    y_new = atext.replace(f'<observation>{obs[0]}</observation>',
-                          f'<observation>{o_new}</observation>')
+    if kind == 'freetext':
+        y_new = None
+    else:
+        y_new = atext.replace(f'<observation>{obs[0]}</observation>',
+                              f'<observation>{o_new}</observation>')
     # ReFocus repeats the value outside the span (ANSWER/FINAL ANSWER) — swap there too.
-    if subset == 'ReFocus':
+    if subset == 'ReFocus' and y_new is not None:
         y_new = y_new.replace(old, new)
         plain_old, plain_new = old.replace(',', '').replace(' ', ''), \
             new.replace(',', '').replace(' ', '')
         y_new = y_new.replace(plain_old, plain_new)
-    if y_new == atext:
+    if kind != 'freetext' and y_new == atext:
         return None  # swap didn't take -> dropped
 
     holdout = int(hashlib.sha256(rid.encode()).hexdigest(), 16) % 10 == 0

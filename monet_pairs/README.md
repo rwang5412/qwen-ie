@@ -29,6 +29,7 @@ plus a frozen 10% holdout for the flip eval.
 |---|---|---|---|
 | step1_filter.py | 1,2,6-text,8 | Mac (done) | train.json -> pairs_manifest.jsonl (id, obs/obs', y/y', edit_prompt, split) |
 | step2_recover_bbox.py | bbox recovery | Mac (done) | + bbox, scores; exports kept images to counterfactual/images/ |
+| step2b_propose_swaps.py | 3-spec for freetext | cluster GPU | Qwen2.5-VL proposes obs' for kind=='freetext' (dog->cat, smiling->frowning); color/number pass through unchanged -> pairs_ready.jsonl (PLAN CHANGE: model call for new_content, approved for diversity) |
 | step3_edit_composite.py | 3,4 | cluster GPU | -> edited/{id}_orig.png, {id}_aux.png, roi_delta |
 | step5_verify.py | 5,6-assert | cluster GPU | + verified flag (Qwen2.5-VL-7B answers Q from original' alone) |
 | step7_encode_zprime.py | 7 | cluster GPU + Monet repo | verified rows -> zprime_cache/{id}.pt [K,H] (stub: wire 2 calls) |
