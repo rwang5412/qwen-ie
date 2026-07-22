@@ -83,9 +83,11 @@ JUDGE_QS = [
     ('nonsense', 'Would "{prop}" be physically absurd at the exact spot of '
              'the red box — a thing that cannot exist there (e.g. a shirt '
              'where someone\'s legs are)?'),
-    ('partial', 'Look at "{obs}" in the image. Does part of it stick out '
-             'PAST the edges of the red box (hair, garment, or object '
-             'continuing outside the box)?'),
+    ('partial', 'Look at "{obs}" in the image. Does a SUBSTANTIAL part of it '
+             '(roughly a quarter or more) lie OUTSIDE the red box, so the '
+             'unedited remainder would visibly contradict the edit? Small '
+             'spill past the edges (a sleeve tip, a few hair strands, a '
+             'sliver grazing the boundary) counts as NO.'),
 ]
 
 
