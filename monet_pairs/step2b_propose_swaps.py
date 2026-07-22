@@ -42,17 +42,20 @@ If no replacement satisfies every rule, reply with exactly: SKIP
 Otherwise reply with ONLY the replacement phrase, nothing else."""
 
 CONTAIN_PROMPT = """The red box in this image marks a region that will be
-repainted by an image editor to change "{obs}" into "{prop}".
+repainted by an image editor to change "{obs}" into "{prop}". The editor
+blends the box border, so SMALL spill past the edges (a sleeve tip, a few
+hair strands, a sliver of an object grazing the boundary) does NOT matter.
 
-Answer NOT_CONTAINED if ANY of these hold:
-- the thing being changed extends outside the red box (limbs, body, object
-  parts crossing the box edge),
-- the change would require altering anything outside the box to stay
-  physically coherent (pose continuation, contact with ground/water,
-  shadows, reflections),
+Answer NOT_CONTAINED only if one of these clearly holds:
+- a SUBSTANTIAL part of the thing being changed (roughly a quarter of it or
+  more) lies outside the red box, so the unedited remainder would visibly
+  contradict the edit,
+- the change cannot look right without also altering things outside the box
+  (a mid-air pose continuing outside, contact with ground/water, a large
+  mirror reflection),
 - the box cuts through the middle of the subject mid-action.
 
-Otherwise answer CONTAINED.
+If the thing being changed is essentially inside the box, answer CONTAINED.
 Reply with exactly one word: CONTAINED or NOT_CONTAINED."""
 
 JUDGE_HEADER = """You are shown the ORIGINAL image. The red box marks the ONLY
