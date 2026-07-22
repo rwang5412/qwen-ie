@@ -59,7 +59,7 @@ JUDGE_PROMPT = """You are shown the ORIGINAL image. The red box marks the ONLY
 region an image editor will repaint. The PLAN is to change "{obs}" into
 "{prop}". The question being answered about this image: "{q}"
 
-Check the plan against exactly three problems:
+Check the plan against exactly four problems:
 1. POSE/ACTION: does it alter body pose, an action in progress, motion, or
    location (e.g. jumping -> running, sitting -> standing)? Changing the
    appearance, color, or identity of a fully-visible object/garment is FINE.
@@ -70,6 +70,10 @@ Check the plan against exactly three problems:
 3. NONSENSE: would the result be physically absurd in that spot (e.g. a
    shirt where someone's legs are)? An unusual but physically coherent
    result is FINE.
+4. PARTIAL EVIDENCE: does the thing being changed visibly continue OUTSIDE
+   the red box (e.g. only part of the hair, garment, or object is inside,
+   so the unedited remainder would contradict the edit)? A subject fully
+   inside the box is FINE.
 
 Think in at most 3 short sentences, then give your verdict on its own final
 line in exactly this form:
