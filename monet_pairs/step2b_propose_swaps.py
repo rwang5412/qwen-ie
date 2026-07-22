@@ -55,33 +55,35 @@ Answer NOT_CONTAINED if ANY of these hold:
 Otherwise answer CONTAINED.
 Reply with exactly one word: CONTAINED or NOT_CONTAINED."""
 
-JUDGE_PROMPT = """You are shown the ORIGINAL image. The red box marks the ONLY
+JUDGE_HEADER = """You are shown the ORIGINAL image. The red box marks the ONLY
 region an image editor will repaint. The PLAN is to change "{obs}" into
-"{prop}". The question being answered about this image: "{q}"
+"{prop}".
 
-Answer these five questions. Answer each with YES or NO only.
+{question}
 
-1. Does changing "{obs}" into "{prop}" alter a body pose, an action in
-   progress, motion, or location (e.g. jumping -> running)?
-2. Read the question again: "{q}". Does it ask about MULTIPLE people or
-   objects, or the scene in general (e.g. "the participants", "the men",
-   "everyone"), rather than one single specific subject?
-3. Look at the image OUTSIDE the red box. Do you see more of the same kind
-   of thing as "{obs}" out there (other instances the edit would not touch)?
-4. Would "{prop}" be physically absurd at the exact spot of the red box —
-   a thing that cannot exist there (e.g. a shirt where someone's legs are)?
-5. Look at "{obs}" in the image. Does part of it stick out PAST the edges
-   of the red box (hair, garment, or object continuing outside the box)?
+Answer YES or NO only."""
 
-Reply in exactly this format, nothing else:
-1: YES or NO
-2: YES or NO
-3: YES or NO
-4: YES or NO
-5: YES or NO"""
-
-JUDGE_CLAUSES = {1: 'pose', 2: 'plural-question', 3: 'others-outside',
-                 4: 'nonsense', 5: 'partial'}
+# each judge question asked in its OWN call — multi-question formats collapse
+# to uniform answers on small models
+JUDGE_QS = [
+    ('pose', 'Does changing "{obs}" into "{prop}" alter a body pose, an '
+             'action in progress, motion, or location (e.g. jumping -> '
+             'running, sitting -> standing)?'),
+    ('plural-question', 'Consider only this question text: "{q}". Does it '
+             'ask about MULTIPLE people or objects, or a group, or the '
+             'scene in general (e.g. "the participants", "the men", '
+             '"everyone") rather than one single specific subject?'),
+    ('others-outside', 'Look at the parts of the image OUTSIDE the red box. '
+             'Do you see more of the same kind of thing as "{obs}" out '
+             'there (other instances that repainting the box would not '
+             'change)?'),
+    ('nonsense', 'Would "{prop}" be physically absurd at the exact spot of '
+             'the red box — a thing that cannot exist there (e.g. a shirt '
+             'where someone\'s legs are)?'),
+    ('partial', 'Look at "{obs}" in the image. Does part of it stick out '
+             'PAST the edges of the red box (hair, garment, or object '
+             'continuing outside the box)?'),
+]
 
 
 def ask(model, processor, image, text, max_new=24):
@@ -112,6 +114,8 @@ def main():
     ap.add_argument("--out", required=True, help="completed manifest for step3")
     ap.add_argument("--start", type=int, default=0)
     ap.add_argument("--end", type=int, default=None)
+    ap.add_argument("--model", default=PROPOSER_ID,
+                    help="VLM for propose+contain+judge (e.g. Qwen/Qwen2.5-VL-32B-Instruct)")
     args = ap.parse_args()
 
     assert torch.cuda.is_available(), "no CUDA visible — wrong node"
@@ -126,8 +130,9 @@ def main():
             done = {json.loads(l)["id"] for l in f if l.strip()}
 
     model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
-        PROPOSER_ID, torch_dtype=torch.bfloat16, device_map="cuda")
-    processor = AutoProcessor.from_pretrained(PROPOSER_ID)
+        args.model, torch_dtype=torch.bfloat16, device_map="cuda")
+    processor = AutoProcessor.from_pretrained(args.model)
+    print(f"filter model: {args.model}", flush=True)
 
     n_pass = n_prop = n_drop = 0
     with open(args.out, "a") as out_f:
@@ -159,21 +164,23 @@ def main():
                 continue
             # adversarial judge: sees the question too — kills multi-instance
             # (answer wouldn't flip), pose/action slips, and physical nonsense.
-            j = ask(model, processor, boxed,
-                    JUDGE_PROMPT.format(obs=r["obs"], prop=prop,
-                                        q=r["question"].replace("<image>", "").strip()),
-                    max_new=32)
-            answers = dict((int(n), v) for n, v in
-                           re.findall(r'([1-5])\s*[:.)]\s*(YES|NO)', j.upper()))
-            yes = {k for k, v in answers.items() if v == 'YES'}
+            q_text = r["question"].replace("<image>", "").strip()
+            yes = set()
+            for tag, qt in JUDGE_QS:
+                a = ask(model, processor, boxed,
+                        JUDGE_HEADER.format(
+                            obs=r["obs"], prop=prop,
+                            question=qt.format(obs=r["obs"], prop=prop, q=q_text)),
+                        max_new=4)
+                if a.strip().upper().startswith("YES"):
+                    yes.add(tag)
             # multi-instance needs BOTH halves: plural question AND identical
             # instances outside the box; alone, neither blocks the edit.
-            fatal = ({1, 4, 5} & yes) or ({2, 3} <= yes)
-            if len(answers) < 5 or fatal:   # unparseable counts as FAIL
+            fatal = ({'pose', 'nonsense', 'partial'} & yes) or \
+                    ({'plural-question', 'others-outside'} <= yes)
+            if fatal:
                 n_drop += 1
-                why = ','.join(JUDGE_CLAUSES[k] for k in sorted(yes)) \
-                    if answers else f'unparseable:{j[:40]!r}'
-                print(f"[{i}] {r['id']} DROP judge ({prop!r}) :: {why or 'incomplete'}",
+                print(f"[{i}] {r['id']} DROP judge ({prop!r}) :: {','.join(sorted(yes))}",
                       flush=True)
                 continue
             r2 = dict(r)
