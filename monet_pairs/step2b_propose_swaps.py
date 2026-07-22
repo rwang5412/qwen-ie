@@ -55,24 +55,27 @@ Answer NOT_CONTAINED if ANY of these hold:
 Otherwise answer CONTAINED.
 Reply with exactly one word: CONTAINED or NOT_CONTAINED."""
 
-JUDGE_PROMPT = """The red box marks the ONLY region an image editor will
-repaint. Planned change: "{obs}" becomes "{prop}".
-The question being answered about this image: "{q}"
+JUDGE_PROMPT = """You are shown the ORIGINAL image. The red box marks the ONLY
+region an image editor will repaint. The PLAN is to change "{obs}" into
+"{prop}". The question being answered about this image: "{q}"
 
-Answer FAIL if ANY of these hold:
-1. POSE/ACTION: the change alters body pose, an action in progress, motion,
-   or location (e.g. jumping -> running, sitting -> standing).
-2. MULTI-INSTANCE: the question refers to multiple people/objects or the
-   whole scene, and similar instances OUTSIDE the red box would still show
-   the old content after the edit (e.g. recoloring one helmet when several
-   riders wear helmets).
-3. NONSENSE: the edited result would be physically implausible or absurd in
-   that spot (e.g. replacing pants with a shirt on someone's legs).
-4. NO FLIP: someone answering the question from the edited image would still
-   give the OLD answer rather than "{prop}".
+Check the plan against exactly three problems:
+1. POSE/ACTION: does it alter body pose, an action in progress, motion, or
+   location (e.g. jumping -> running, sitting -> standing)? Changing the
+   appearance, color, or identity of a fully-visible object/garment is FINE.
+2. MULTI-INSTANCE: does the question refer to multiple people/objects or the
+   whole scene, while similar instances OUTSIDE the red box would keep the
+   old content (e.g. recoloring one helmet when several riders wear helmets)?
+   A question about a single subject whose evidence is in the box is FINE.
+3. NONSENSE: would the result be physically absurd in that spot (e.g. a
+   shirt where someone's legs are)? An unusual but physically coherent
+   result is FINE.
 
-Otherwise answer PASS.
-Reply with exactly one word: PASS or FAIL."""
+Think in at most 3 short sentences, then give your verdict on its own final
+line in exactly this form:
+VERDICT: PASS
+or
+VERDICT: FAIL"""
 
 
 def ask(model, processor, image, text, max_new=24):
@@ -153,10 +156,12 @@ def main():
             j = ask(model, processor, boxed,
                     JUDGE_PROMPT.format(obs=r["obs"], prop=prop,
                                         q=r["question"].replace("<image>", "").strip()),
-                    max_new=6)
-            if not j.strip().upper().startswith("PASS"):
+                    max_new=120)
+            m = re.findall(r'VERDICT:\s*(PASS|FAIL)', j.upper())
+            if not m or m[-1] != 'PASS':   # unparseable counts as FAIL
                 n_drop += 1
-                print(f"[{i}] {r['id']} DROP judge ({prop!r})", flush=True)
+                reason = j.replace(chr(10), ' ')[:90]
+                print(f"[{i}] {r['id']} DROP judge ({prop!r}) :: {reason}", flush=True)
                 continue
             r2 = dict(r)
             r2["obs_new"] = prop
