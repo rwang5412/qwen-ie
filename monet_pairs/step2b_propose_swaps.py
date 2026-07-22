@@ -59,27 +59,25 @@ JUDGE_PROMPT = """You are shown the ORIGINAL image. The red box marks the ONLY
 region an image editor will repaint. The PLAN is to change "{obs}" into
 "{prop}". The question being answered about this image: "{q}"
 
-Check the plan against exactly four problems:
-1. POSE/ACTION: does it alter body pose, an action in progress, motion, or
-   location (e.g. jumping -> running, sitting -> standing)? Changing the
-   appearance, color, or identity of a fully-visible object/garment is FINE.
-2. MULTI-INSTANCE: does the question refer to multiple people/objects or the
-   whole scene, while similar instances OUTSIDE the red box would keep the
-   old content (e.g. recoloring one helmet when several riders wear helmets)?
-   A question about a single subject whose evidence is in the box is FINE.
-3. NONSENSE: would the result be physically absurd in that spot (e.g. a
-   shirt where someone's legs are)? An unusual but physically coherent
-   result is FINE.
-4. PARTIAL EVIDENCE: does the thing being changed visibly continue OUTSIDE
-   the red box (e.g. only part of the hair, garment, or object is inside,
-   so the unedited remainder would contradict the edit)? A subject fully
-   inside the box is FINE.
+Answer these four questions about the plan. Answer each with YES or NO only.
 
-Think in at most 3 short sentences, then give your verdict on its own final
-line in exactly this form:
-VERDICT: PASS
-or
-VERDICT: FAIL"""
+1. Does the change alter a body pose, an action in progress, motion, or
+   location (e.g. jumping -> running, sitting -> standing)?
+2. Does the question ask about multiple people/objects or the whole scene,
+   while the red box covers only ONE of them (so identical content outside
+   the box would stay unchanged)?
+3. Would the result be physically absurd in that exact spot (e.g. a shirt
+   where someone's legs are)?
+4. Does the thing being changed visibly continue OUTSIDE the red box (only
+   part of the hair/garment/object is inside the box)?
+
+Reply in exactly this format, nothing else:
+1: YES or NO
+2: YES or NO
+3: YES or NO
+4: YES or NO"""
+
+JUDGE_CLAUSES = {1: 'pose', 2: 'multi-instance', 3: 'nonsense', 4: 'partial'}
 
 
 def ask(model, processor, image, text, max_new=24):
@@ -160,12 +158,14 @@ def main():
             j = ask(model, processor, boxed,
                     JUDGE_PROMPT.format(obs=r["obs"], prop=prop,
                                         q=r["question"].replace("<image>", "").strip()),
-                    max_new=120)
-            m = re.findall(r'VERDICT:\s*(PASS|FAIL)', j.upper())
-            if not m or m[-1] != 'PASS':   # unparseable counts as FAIL
+                    max_new=32)
+            answers = dict((int(n), v) for n, v in
+                           re.findall(r'([1-4])\s*[:.)]\s*(YES|NO)', j.upper()))
+            hits = [JUDGE_CLAUSES[k] for k, v in sorted(answers.items()) if v == 'YES']
+            if len(answers) < 4 or hits:   # unparseable counts as FAIL
                 n_drop += 1
-                reason = j.replace(chr(10), ' ')[:90]
-                print(f"[{i}] {r['id']} DROP judge ({prop!r}) :: {reason}", flush=True)
+                why = ','.join(hits) if hits else f'unparseable:{j[:40]!r}'
+                print(f"[{i}] {r['id']} DROP judge ({prop!r}) :: {why}", flush=True)
                 continue
             r2 = dict(r)
             r2["obs_new"] = prop
