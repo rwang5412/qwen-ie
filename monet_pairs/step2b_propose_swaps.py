@@ -55,6 +55,25 @@ Answer NOT_CONTAINED if ANY of these hold:
 Otherwise answer CONTAINED.
 Reply with exactly one word: CONTAINED or NOT_CONTAINED."""
 
+JUDGE_PROMPT = """The red box marks the ONLY region an image editor will
+repaint. Planned change: "{obs}" becomes "{prop}".
+The question being answered about this image: "{q}"
+
+Answer FAIL if ANY of these hold:
+1. POSE/ACTION: the change alters body pose, an action in progress, motion,
+   or location (e.g. jumping -> running, sitting -> standing).
+2. MULTI-INSTANCE: the question refers to multiple people/objects or the
+   whole scene, and similar instances OUTSIDE the red box would still show
+   the old content after the edit (e.g. recoloring one helmet when several
+   riders wear helmets).
+3. NONSENSE: the edited result would be physically implausible or absurd in
+   that spot (e.g. replacing pants with a shirt on someone's legs).
+4. NO FLIP: someone answering the question from the edited image would still
+   give the OLD answer rather than "{prop}".
+
+Otherwise answer PASS.
+Reply with exactly one word: PASS or FAIL."""
+
 
 def ask(model, processor, image, text, max_new=24):
     msgs = [{"role": "user", "content": [
@@ -128,6 +147,16 @@ def main():
             if not verdict.strip().upper().startswith("CONTAINED"):
                 n_drop += 1
                 print(f"[{i}] {r['id']} DROP not-contained ({prop!r})", flush=True)
+                continue
+            # adversarial judge: sees the question too — kills multi-instance
+            # (answer wouldn't flip), pose/action slips, and physical nonsense.
+            j = ask(model, processor, boxed,
+                    JUDGE_PROMPT.format(obs=r["obs"], prop=prop,
+                                        q=r["question"].replace("<image>", "").strip()),
+                    max_new=6)
+            if not j.strip().upper().startswith("PASS"):
+                n_drop += 1
+                print(f"[{i}] {r['id']} DROP judge ({prop!r})", flush=True)
                 continue
             r2 = dict(r)
             r2["obs_new"] = prop
